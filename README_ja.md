@@ -13,19 +13,20 @@ IEEE BigData 2026 採択論文 *Relational Learning between Stores and Products 
 
 本リポジトリは，店舗・商品間の購買行列と補助情報から，商品人気や店舗規模の影響を緩和した店舗・商品埋め込みを学習する **超球面上の類似度学習フレームワーク** を提供します．
 
-- **NPMI 変換 (前処理)**: 生の販売数の代わりに Normalized Pointwise Mutual Information (NPMI，値域 $`[-1, 1]`$) を教師データとして採用し，商品人気と店舗規模の影響を緩和します．
-- **単位 $`\ell_2`$ ノルム制約**: 店舗・商品埋め込みベクトルに $`\lVert \mathbf{u}_i \rVert_2 = \lVert \mathbf{v}_j \rVert_2 = 1`$ を課し，内積をコサイン類似度 (値域 $`[-1, 1]`$) に一致させます．
-- **補助情報制約**: 店舗特徴量 $`\mathbf{X}_U`$ と商品特徴量 $`\mathbf{X}_V`$ からエンコーダ $`f_\theta, g_\phi`$ を介して埋め込みを生成することで，購買履歴のない新規商品 (コールドスタート) にも対応します．
+- **NPMI 変換 (前処理)**: 生の販売数の代わりに Normalized Pointwise Mutual Information (NPMI，値域 `[-1, 1]`) を教師データとして採用し，商品人気と店舗規模の影響を緩和します．
+- **単位 L2 ノルム制約**: 店舗・商品埋め込みベクトルの L2 ノルムを 1 に制約し，内積をコサイン類似度 (値域 `[-1, 1]`) に一致させます．
+- **補助情報制約**: 店舗特徴量 `X_U` と商品特徴量 `X_V` からエンコーダを介して埋め込みを生成することで，購買履歴のない新規商品 (コールドスタート) にも対応します．
 
 ### 定式化
 
-購買行列 $`\mathbf{R} \in \mathbb{Z}_{+}^{m \times n}`$，観測マスク $`\mathbf{M} \in \lbrace 0, 1 \rbrace^{m \times n}`$，店舗補助情報 $`\mathbf{X}_U \in \mathbb{R}^{m \times p}`$，商品補助情報 $`\mathbf{X}_V \in \mathbb{R}^{n \times q}`$ に対して，観測ペアの NPMI 行列 $`\mathbf{R}_{\text{NPMI}}`$ を以下の最適化問題により近似します．
+購買行列 `R` (`m x n`)，観測マスク `M` (`{0, 1}^{m x n}`)，店舗補助情報 `X_U` (`m x p`)，商品補助情報 `X_V` (`n x q`) に対して，観測ペアの NPMI 行列 `R_NPMI` を以下の最適化問題により近似します．
 
-$$
-\min_{\theta, \phi} \; \left\lVert \mathbf{M} \odot \left( \mathbf{R}_{\text{NPMI}} - f_\theta(\mathbf{X}_U) g_\phi(\mathbf{X}_V)^\top \right) \right\rVert_F^2
-$$
+```math
+\min_{\theta, \phi} \quad \left\lVert \mathbf{M} \odot \left( \mathbf{R}_{\text{NPMI}} - f_\theta(\mathbf{X}_U) g_\phi(\mathbf{X}_V)^\top \right) \right\rVert_F^2
+\qquad \text{s.t.} \quad \lVert f_\theta(\mathbf{x}_i^U) \rVert_2 = 1, \quad \lVert g_\phi(\mathbf{x}_j^V) \rVert_2 = 1
+```
 
-各エンコーダ $`f_\theta : \mathbb{R}^p \to \mathbb{R}^k`$，$`g_\phi : \mathbb{R}^q \to \mathbb{R}^k`$ は出力層に $`\ell_2`$ 正規化層を備え，任意の $`i \in \mathcal{I}, j \in \mathcal{J}`$ に対して $`\lVert f_\theta(\mathbf{x}^U_i) \rVert_2 = 1`$，$`\lVert g_\phi(\mathbf{x}^V_j) \rVert_2 = 1`$ を満たします．
+各エンコーダ `f_theta`, `g_phi` は出力層に L2 正規化層を備えており，すべての店舗・商品埋め込みが単位超球面上に配置されます．
 
 ---
 
@@ -77,7 +78,7 @@ uv run python -m src.train_baseline \
 
 ### 2. 評価の実行
 
-学習済みチェックポイント (`U.pt`, `V.pt` 等) に対して，ランキング指標 (Precision@$`K`$, Recall@$`K`$, MAP@$`K`$, NDCG@$`K`$, Personalization@$`K`$)，人気バイアス指標 (APLT, ARP, PS-Recall, head/tail-NDCG)，再構成指標 ($`R^2`$, $`\rho_{\text{store}}`$) を一括算出します．
+学習済みチェックポイント (`U.pt`, `V.pt` 等) に対して，ランキング指標 (`Precision@K`, `Recall@K`, `MAP@K`, `NDCG@K`, `Personalization@K`)，人気バイアス指標 (`APLT`, `ARP`, `PS-Recall`, `head/tail-NDCG`)，再構成指標 (`R^2`, `rho_store`) を一括算出します．
 
 ```bash
 uv run python -m src.eval_unified \
@@ -93,12 +94,12 @@ uv run python -m src.eval_unified \
 
 | パラメータ | 既定値 | 説明 |
 | :--- | :--- | :--- |
-| 店舗側エンコーダ $`f_\theta`$ | 線形写像 (バイアスなし) + $`\ell_2`$ 正規化 | 店舗補助情報 $`\mathbf{X}_U`$ を $`k`$ 次元へ射影 |
-| 商品側エンコーダ $`g_\phi`$ | 2 層 MLP (隠れ次元 64) + $`\ell_2`$ 正規化 | 商品補助情報 $`\mathbf{X}_V`$ を $`k`$ 次元へ射影 |
-| 埋め込み次元 $`k`$ | 32 | 店舗・商品埋め込みの次元数 |
-| 最適化手法 | Adam (学習率 $`\eta = 10^{-3}`$，フルバッチ) | パラメータ $`\theta, \phi`$ の同時最適化 |
-| 重み減衰 (weight decay) | $`10^{-4}`$ | `wo_norm`・`wo_both` 条件では 0 |
-| 最大エポック数 / 早期終了 | $`10^5`$ / patience 500 | 検証 MSE を監視して最良重みを復元 |
+| 店舗側エンコーダ | 線形写像 (バイアスなし) + L2 正規化 | 店舗補助情報 `X_U` を `k` 次元へ射影 |
+| 商品側エンコーダ | 2 層 MLP (隠れ次元 64) + L2 正規化 | 商品補助情報 `X_V` を `k` 次元へ射影 |
+| 埋め込み次元 `k` | `32` | 店舗・商品埋め込みの次元数 |
+| 最適化手法 | Adam (学習率 `1e-3`，フルバッチ) | 両エンコーダの同時最適化 |
+| 重み減衰 (weight decay) | `1e-4` | `wo_norm`・`wo_both` 条件では `0` |
+| 最大エポック数 / 早期終了 | `100,000` / patience `500` | 検証 MSE を監視して最良重みを復元 |
 
 ---
 
@@ -130,12 +131,12 @@ npmi-hyperspherical-mf/
 
 | 項目 | 値 |
 | :--- | ---: |
-| 店舗数 $`m`$ | 10 |
-| 商品数 $`n`$ | 3,049 |
-| 観測ペア数 $`\lvert \Omega \rvert`$ | 30,490 |
-| 観測密度 $`\rho`$ | 1.000 |
-| 店舗補助情報次元 $`p`$ | 13 (所在州 one-hot 3 次元 + 学習列の部門・カテゴリ別販売シェア 10 次元) |
-| 商品補助情報次元 $`q`$ | 11 (カテゴリ・部門の one-hot ベクトル) |
+| 店舗数 (`m`) | 10 |
+| 商品数 (`n`) | 3,049 |
+| 観測ペア数 | 30,490 |
+| 観測密度 | 1.000 |
+| 店舗補助情報次元 (`p`) | 13 (所在州 one-hot 3 次元 + 学習列の部門・カテゴリ別販売シェア 10 次元) |
+| 商品補助情報次元 (`q`) | 11 (カテゴリ・部門の one-hot ベクトル) |
 
 元データを `data/m5/raw/` に配置して前処理スクリプトを実行することで，学習に必要な行列ファイル (`R`, `R_NPMI`, `mask`, `X_U`, `X_V`) と商品分割ファイル (`data_split.parquet`) を生成できます．独自の小売 POS データを用いる場合も，同一フォーマットの前処理済みファイルを準備することでそのまま学習・評価が可能です．
 
